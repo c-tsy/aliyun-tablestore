@@ -221,7 +221,8 @@ class ModelsDefine {
             }
         }
         let rs = await this._parent.instances.putRow(params)
-        return rs;
+        //TODO 检测是否成功
+        return conf;
     }
     /**
      * 构建数据
@@ -235,9 +236,49 @@ class ModelsDefine {
      * 批量创建
      * @param data 
      */
-    async bulkCreate(data: Object) {
+    async bulkCreate(data: any[]) {
         await this.check()
-        debugger
+        let params: { [index: string]: any } = {
+            tables: [
+                {
+                    tableName: this.table,
+                    rows: [
+                    ]
+                }
+            ]
+        };
+        for (let conf of data) {
+            let row: { type: string, condition: any, primaryKey: { [index: string]: any }, attributeColumns: { [index: string]: any }, [index: string]: any } = {
+                type: "PUT",
+                condition: new TableStore.Condition(TableStore.RowExistenceExpectation.IGNORE, null),
+                primaryKey: [],
+                attributeColumns: [],
+                returnContent: { returnType: TableStore.ReturnType.Primarykey }
+            }
+            for (let x in this.define) {
+                let obj = this.define[x];
+                if (obj.primaryKey) {
+                    if (obj.autoIncrement) {
+                        row.primaryKey.push({ _id: Date.now().toString() })
+                    }
+                    row.primaryKey.push({
+                        [x]: getLongFunc(obj.type, conf[x])
+                    })
+                } else {
+                    row.attributeColumns.push({ [x]: getLongFunc(obj.type, conf[x] !== undefined ? conf[x] : fget(obj, 'defaultValue')) })
+                }
+            }
+            params.tables[0].rows.push(row);
+        }
+        let rs = await this._parent.instances.batchWriteRow(params)
+        //TODO 检测是否成功
+        // let pass = true;
+        // for (let x of rs.tables) {
+        //     if (!x.isOk) {
+        //         pass = false;
+        //     }
+        // }
+        return data;
     }
     /**
      * 查询并分页
