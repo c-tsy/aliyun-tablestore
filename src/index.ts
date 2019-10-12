@@ -1,9 +1,16 @@
 const TableStore: any = require('tablestore')
+const Long: any = TableStore.Long;
 export class UpdateConfig {
     where?: Object = {};
     options?: {
         returning?: boolean
     } = {}
+}
+function fget(obj: any, key: string) {
+    if (obj[key] instanceof Function) {
+        return obj[key](obj);
+    }
+    return obj[key];
 }
 /**
  * 区域表
@@ -40,7 +47,7 @@ enum DataTypeMap {
     'BIGINT'
 }
 export function getTSType(type: any) {
-    let tn: string = (type.name || type.key).toLowerCase();
+    let tn: string = ((type.name || type.key)).toLowerCase();
     if (tn.includes('int')) {
         return 'INTEGER';
     } else if (tn.includes('char')) {
@@ -50,6 +57,18 @@ export function getTSType(type: any) {
     }
     return "BINARY"
     debugger
+}
+export function getLongFunc(type: any, value: any) {
+    let ts = getTSType(type);
+    switch (ts) {
+        case 'INTEGER':
+            return Long.fromNumber(value);
+            break;
+        case 'STRING':
+            return value;
+            break;
+    }
+    return value;
 }
 /**
  * 数据操作
@@ -101,14 +120,14 @@ class ModelsDefine {
                         type: getTSType(c.type),
                     }
                     if (c.autoIncrement) {
-                        pkc.option = 'AUTO_INCREMENT'
+                        // pkc.option = 'AUTO_INCREMENT'
                     }
                     ctable.tableMeta.primaryKey.push(pkc)
                 } else {
-                    ctable.tableMeta.definedColumn.push({
-                        name: key,
-                        type: 1
-                    })
+                    // ctable.tableMeta.definedColumn.push({
+                    //     name: key,
+                    //     type: 1
+                    // })
                 }
             }
             // ctable.tableMeta.definedColumn.push({
@@ -140,24 +159,37 @@ class ModelsDefine {
      */
     async findAll(conf: any) {
         await this.check()
-        let rs = await this._parent.instances.batchGetRow({
+        let rs = await this._parent.instances.getRange({
             tableName: this.table,
-            searchQuery: {
-                offset: 0,
-                limit: 10, //如果只为了取行数，但不需要具体数据，可以设置limit=0，即不返回任意一行数据。
-                query: { // 设置查询类型为TermQuery
-                    queryType: TableStore.QueryType.TERM_QUERY,
-                    query: {
-                        fieldName: "EID",
-                        term: "1"
-                    }
-                },
-                getTotalCount: true // 结果中的TotalCount可以表示表中数据的总行数， 默认false不返回
-            },
-            columnToGet: { //返回列设置：RETURN_SPECIFIED(自定义),RETURN_ALL(所有列),RETURN_NONE(不返回)
-                returnType: conf.attributes && conf.attributes.length > 0 ? TableStore.ColumnReturnType.RETURN_SPECIFIED : TableStore.ColumnReturnType.RETURN_ALL,
-                returnNames: conf.attributes || []
-            }
+            direction: TableStore.Direction.FORWARD,
+            inclusiveStartPrimaryKey: [
+                { AID: TableStore.INF_MIN },
+                { AppID: TableStore.INF_MIN },
+                { Name: TableStore.INF_MIN },
+            ],
+            exclusiveEndPrimaryKey: [
+                { AID: TableStore.INF_MAX },
+                { AppID: TableStore.INF_MAX },
+                { Name: TableStore.INF_MAX },
+            ],
+            maxVersions: 10,
+            limit: 2
+            // searchQuery: {
+            //     offset: 0,
+            //     limit: 10, //如果只为了取行数，但不需要具体数据，可以设置limit=0，即不返回任意一行数据。
+            //     query: { // 设置查询类型为TermQuery
+            //         queryType: TableStore.QueryType.TERM_QUERY,
+            //         query: {
+            //             fieldName: "EID",
+            //             term: "1"
+            //         }
+            //     },
+            //     getTotalCount: true // 结果中的TotalCount可以表示表中数据的总行数， 默认false不返回
+            // },
+            // columnToGet: { //返回列设置：RETURN_SPECIFIED(自定义),RETURN_ALL(所有列),RETURN_NONE(不返回)
+            //     returnType: conf.attributes && conf.attributes.length > 0 ? TableStore.ColumnReturnType.RETURN_SPECIFIED : TableStore.ColumnReturnType.RETURN_ALL,
+            //     returnNames: conf.attributes || []
+            // }
         })
         return [{ dataValues: 1 }];
     }
@@ -167,7 +199,29 @@ class ModelsDefine {
      */
     async create(conf: any) {
         await this.check()
-        debugger
+        let params: any = {
+            tableName: this.table,
+            condition: new TableStore.Condition(TableStore.RowExistenceExpectation.IGNORE, null),
+            primaryKey: [
+            ],
+            attributeColumns: [],
+            returnContent: { returnType: TableStore.ReturnType.Primarykey }
+        };
+        for (let x in this.define) {
+            let obj = this.define[x];
+            if (obj.primaryKey) {
+                if (obj.autoIncrement) {
+                    params.primaryKey.push({ _id: Date.now().toString() })
+                }
+                params.primaryKey.push({
+                    [x]: getLongFunc(obj.type, conf[x])
+                })
+            } else {
+                params.attributeColumns.push({ [x]: getLongFunc(obj.type, conf[x] !== undefined ? conf[x] : fget(obj, 'defaultValue')) })
+            }
+        }
+        let rs = await this._parent.instances.putRow(params)
+        return rs;
     }
     /**
      * 构建数据
