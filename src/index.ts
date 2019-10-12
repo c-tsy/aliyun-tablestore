@@ -112,9 +112,9 @@ class ModelsDefine {
             for (let key in this.define) {
                 let c = this.define[key]
                 if (c.primaryKey) {
-                    if (ctable.tableMeta.primaryKey.length == 0) {
-                        ctable.tableMeta.primaryKey.push({ name: "_id", type: "STRING" })
-                    }
+                    // if (ctable.tableMeta.primaryKey.length == 0) {
+                    //     ctable.tableMeta.primaryKey.push({ name: "_id", type: "STRING" })
+                    // }
                     let pkc: any = {
                         name: key,
                         type: getTSType(c.type),
@@ -242,8 +242,7 @@ class ModelsDefine {
             tables: [
                 {
                     tableName: this.table,
-                    rows: [
-                    ]
+                    rows: []
                 }
             ]
         };
@@ -258,9 +257,9 @@ class ModelsDefine {
             for (let x in this.define) {
                 let obj = this.define[x];
                 if (obj.primaryKey) {
-                    if (obj.autoIncrement) {
-                        row.primaryKey.push({ _id: Date.now().toString() })
-                    }
+                    // if (obj.autoIncrement) {
+                    //     row.primaryKey.push({ _id: Date.now().toString() })
+                    // }
                     row.primaryKey.push({
                         [x]: getLongFunc(obj.type, conf[x])
                     })
