@@ -1,0 +1,18 @@
+{
+  "name": "@ctsy/aliyun-tablestore",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "yarn.lock",
+    "READMD.md"
+  ],
+  "repository": "https://github.com/c-tsy/aliyun-tablestore",
+  "author": "castleiMac <castle@tansuyun.cn>",
+  "license": "MIT",
+  "dependencies": {
+    "tablestore": "^5.0.2"
+  }
+}
