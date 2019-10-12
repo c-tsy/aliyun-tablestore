@@ -62,7 +62,7 @@ export function getLongFunc(type: any, value: any) {
     let ts = getTSType(type);
     switch (ts) {
         case 'INTEGER':
-            return Long.fromNumber(value);
+            return Long.fromNumber(Number(value));
             break;
         case 'STRING':
             return value;
@@ -109,8 +109,14 @@ class ModelsDefine {
                     maxVersions: 1// 保存的最大版本数, 设置为1即代表每列上最多保存一个版本(保存最新的版本).
                 }
             }
+            let auto = false;
             for (let key in this.define) {
                 let c = this.define[key]
+                if (key == '_id') {
+                    ctable.tableMeta.primaryKey.push({ name: "_id", type: "STRING" });
+                    auto = true;
+                    continue;
+                }
                 if (c.primaryKey) {
                     // if (ctable.tableMeta.primaryKey.length == 0) {
                     //     ctable.tableMeta.primaryKey.push({ name: "_id", type: "STRING" })
@@ -119,8 +125,8 @@ class ModelsDefine {
                         name: key,
                         type: getTSType(c.type),
                     }
-                    if (c.autoIncrement) {
-                        // pkc.option = 'AUTO_INCREMENT'
+                    if (c.autoIncrement && auto) {
+                        pkc.option = 'AUTO_INCREMENT'
                     }
                     ctable.tableMeta.primaryKey.push(pkc)
                 } else {
@@ -198,30 +204,7 @@ class ModelsDefine {
      * @param conf 
      */
     async create(conf: any) {
-        await this.check()
-        let params: any = {
-            tableName: this.table,
-            condition: new TableStore.Condition(TableStore.RowExistenceExpectation.IGNORE, null),
-            primaryKey: [
-            ],
-            attributeColumns: [],
-            returnContent: { returnType: TableStore.ReturnType.Primarykey }
-        };
-        for (let x in this.define) {
-            let obj = this.define[x];
-            if (obj.primaryKey) {
-                if (obj.autoIncrement) {
-                    params.primaryKey.push({ _id: Date.now().toString() })
-                }
-                params.primaryKey.push({
-                    [x]: getLongFunc(obj.type, conf[x])
-                })
-            } else {
-                params.attributeColumns.push({ [x]: getLongFunc(obj.type, conf[x] !== undefined ? conf[x] : fget(obj, 'defaultValue')) })
-            }
-        }
-        let rs = await this._parent.instances.putRow(params)
-        //TODO 检测是否成功
+        await this.bulkCreate([conf])
         return conf;
     }
     /**
@@ -257,12 +240,13 @@ class ModelsDefine {
             for (let x in this.define) {
                 let obj = this.define[x];
                 if (obj.primaryKey) {
-                    // if (obj.autoIncrement) {
-                    //     row.primaryKey.push({ _id: Date.now().toString() })
-                    // }
-                    row.primaryKey.push({
-                        [x]: getLongFunc(obj.type, conf[x])
-                    })
+                    if (obj.autoIncrement) {
+                        row.primaryKey.push({ [x]: getLongFunc(obj.type, conf[x] || 0) })
+                    } else {
+                        row.primaryKey.push({
+                            [x]: getLongFunc(obj.type, conf[x] || '')
+                        })
+                    }
                 } else {
                     row.attributeColumns.push({ [x]: getLongFunc(obj.type, conf[x] !== undefined ? conf[x] : fget(obj, 'defaultValue')) })
                 }
@@ -271,12 +255,13 @@ class ModelsDefine {
         }
         let rs = await this._parent.instances.batchWriteRow(params)
         //TODO 检测是否成功
-        // let pass = true;
-        // for (let x of rs.tables) {
-        //     if (!x.isOk) {
-        //         pass = false;
-        //     }
-        // }
+        let pass = true;
+        for (let x of rs.tables) {
+            if (!x.isOk) {
+                pass = false;
+                throw new Error(x.errorCode)
+            }
+        }
         return data;
     }
     /**
