@@ -100,7 +100,7 @@ class ModelsDefine {
      */
     protected async check() {
         if (this.checked) { return true; }
-        if (!await this._parent.checkTable(this.table)) {
+        if (!await this._parent.checkSearchIndex(this.table + '_pk')) {
             //创建表
             let ctable: any = {
                 tableMeta: {
@@ -121,12 +121,29 @@ class ModelsDefine {
                     maxVersions: 1// 保存的最大版本数, 设置为1即代表每列上最多保存一个版本(保存最新的版本).
                 },
                 indexMetas: [
-                    {
-                        name: this.table + '_pk',
-                        primaryKey: []
-                    }
+                    // {
+                    //     name: this.table + '_pk',
+                    //     primaryKey: []
+                    // }
                 ]
             }
+            let cindex: any = {
+                tableName: this.table,
+                indexName: this.table + '_pk',
+                schema: {
+                    fieldSchemas: [
+
+                    ]
+                },
+                indexSetting: { //索引的配置选项
+                    "routingFields": [], //仅支持将主键设为routingFields
+                    "routingPartitionSize": null
+                },
+                // indexSort: {//不支持含含NESTED的索引，
+                //     sorters: [
+                //     ]
+                // }
+            };
             let auto = false;
             for (let key in this.define) {
                 let c = this.define[key]
@@ -135,20 +152,48 @@ class ModelsDefine {
                     auto = true;
                     continue;
                 }
+                let pkc: any = {
+                    name: key,
+                    type: getTSType(c.type),
+                }
                 if (c.primaryKey) {
                     // if (ctable.tableMeta.primaryKey.length == 0) {
                     //     ctable.tableMeta.primaryKey.push({ name: "_id", type: "STRING" })
                     // }
-                    let pkc: any = {
-                        name: key,
-                        type: getTSType(c.type),
-                    }
                     if (c.autoIncrement && auto) {
                         // pkc.option = 'AUTO_INCREMENT'
                     }
+                    // if (cindex.indexSetting.routingFields.length == 0) {
+                    //     cindex.indexSetting.routingFields.push(key);
+                    // }
                     ctable.tableMeta.primaryKey.push(pkc)
-                    ctable.indexMetas[0].primaryKey.push(key);
+                    if (key == 'CTime') {
+                        // cindex.indexSort.sorters.push(
+                        //     {
+                        //         fieldSort: {
+                        //             fieldName: "CTime",
+                        //             order: TableStore.SortOrder.SORT_ORDER_DESC //设置indexSort顺序
+                        //         }
+                        //     })
+                    }
+                    cindex.schema.fieldSchemas.push({
+                        fieldName: key,
+                        fieldType: getTSType(c.type) == 'INTEGER' ? TableStore.FieldType.LONG : TableStore.FieldType.KEYWORD,// 设置字段名、类型
+                        index: true,// 设置开启索引
+                        enableSortAndAgg: true,// 设置开启排序和统计功能
+                        store: false,
+                        isAnArray: false
+                    })
+                    cindex.indexSetting.routingFields.push(key)
                 } else {
+                    cindex.schema.fieldSchemas.push({
+                        fieldName: key,
+                        fieldType: getTSType(c.type) == 'INTEGER' ? TableStore.FieldType.LONG : TableStore.FieldType.KEYWORD,// 设置字段名、类型
+                        index: true,// 设置开启索引
+                        enableSortAndAgg: true,// 设置开启排序和统计功能
+                        store: false,
+                        isAnArray: false
+                    })
                     // ctable.tableMeta.definedColumn.push({
                     //     name: key,
                     //     type: 1
@@ -159,7 +204,14 @@ class ModelsDefine {
             //     name: 'key',
             //     type: 1
             // })
-            await this._parent.instances.createTable(ctable);
+            try {
+                if (!await this._parent.checkTable(this.table)) {
+                    await this._parent.instances.createTable(ctable);
+                }
+                await this._parent.instances.createSearchIndex(cindex);
+            } catch (error) {
+                debugger
+            }
         }
         return this.checked = true
     }
@@ -344,6 +396,7 @@ export default class CTSYTableStore {
     models: { [index: string]: ModelsDefine } = {};
     instances: any;
     existedTables: string[] = [];
+    existedSearchIndexs: string[] = [];
     constructor(database: string, username: string, password: string, options: any) {
         this.instances = new TableStore.Client({
             accessKeyId: username,
@@ -362,7 +415,14 @@ export default class CTSYTableStore {
         if (this.existedTables.length == 0) {
             this.existedTables = (await this.instances.listTable()).tableNames;
         }
-        if (this.existedTables.includes(TableName)) { return true; } return false;
+        return this.existedTables.includes(TableName)
+    }
+    async checkSearchIndex(IndexName: string) {
+        if (this.existedSearchIndexs.includes(IndexName)) { return true; }
+        if (this.existedSearchIndexs.length == 0) {
+            this.existedSearchIndexs = (await this.instances.listSearchIndex()).indices;
+        }
+        return this.existedSearchIndexs.includes(IndexName)
     }
     async createTable(Name: string, ) { }
     define(TableName: string, DbDefine: any) {
