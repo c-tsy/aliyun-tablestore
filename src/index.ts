@@ -325,7 +325,7 @@ class ModelsDefine {
             },
             columnToGet: { //返回列设置：RETURN_SPECIFIED(自定义),RETURN_ALL(所有列),RETURN_NONE(不返回)
                 returnType: TableStore.ColumnReturnType.RETURN_SPECIFIED,
-                returnNames: conf.fields
+                returnNames: conf.attributes
             }
         }
         let queryTypes: any = {}, where = false;
