@@ -204,14 +204,10 @@ class ModelsDefine {
             //     name: 'key',
             //     type: 1
             // })
-            try {
-                if (!await this._parent.checkTable(this.table)) {
-                    await this._parent.instances.createTable(ctable);
-                }
-                await this._parent.instances.createSearchIndex(cindex);
-            } catch (error) {
-                debugger
+            if (!await this._parent.checkTable(this.table)) {
+                await this._parent.instances.createTable(ctable);
             }
+            await this._parent.instances.createSearchIndex(cindex);
         }
         return this.checked = true
     }
@@ -420,7 +416,7 @@ export default class CTSYTableStore {
     async checkSearchIndex(IndexName: string) {
         if (this.existedSearchIndexs.includes(IndexName)) { return true; }
         if (this.existedSearchIndexs.length == 0) {
-            this.existedSearchIndexs = (await this.instances.listSearchIndex()).indices;
+            this.existedSearchIndexs = (await this.instances.listSearchIndex()).indices.map((v: any) => v.indexName);
         }
         return this.existedSearchIndexs.includes(IndexName)
     }
