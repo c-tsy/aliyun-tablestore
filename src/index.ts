@@ -231,84 +231,8 @@ class ModelsDefine {
      * @param conf 
      */
     async findAll(conf: any) {
-        await this.check()
-        let param = {
-            tableName: this.table,
-            indexName: this.table + '_pk',
-            searchQuery: {
-                limit: conf.limit || 10,
-                offset: conf.offset || 0,
-                query: {
-                    queryType: TableStore.QueryType.MATCH_ALL_QUERY,
-                    query: {}
-                    // query: {
-                    //     mustQueryies: [],
-                    //     // shouldQueries: [],
-                    //     // mustNotQueries: [],
-                    // },
-                    // minimumShouldMatch: 0
-                },
-                getTotalCount: false
-            },
-            columnToGet: { //返回列设置：RETURN_SPECIFIED(自定义),RETURN_ALL(所有列),RETURN_NONE(不返回)
-                returnType: TableStore.ColumnReturnType.RETURN_SPECIFIED,
-                returnNames: conf.fields
-            }
-        }
-        let queryTypes: any = {};
-        for (let x in conf.where) {
-            switch (x) {
-                case 'between': break;
-                case 'gt': break;
-                case 'lt': break;
-                case 'gte': break;
-                case 'lte': break;
-                default:
-                    //精确查找
-                    // queryTypes.push();
-                    if (!queryTypes[TableStore.QueryType.TERM_QUERY]) {
-                        queryTypes[TableStore.QueryType.TERM_QUERY] = [];
-                    }
-                    queryTypes[TableStore.QueryType.TERM_QUERY].push({
-                        fieldName: x,
-                        term: conf.where[x]
-                    })
-                    break;
-            }
-        }
-        let qts = Object.keys(queryTypes);
-        // if (qts.length == 1) {
-        //     param.searchQuery.query.queryType = Number(qts[0]);
-        //     param.searchQuery.query.query = queryTypes[qts[0]];
-        // } else {
-        param.searchQuery.query.queryType = TableStore.QueryType.BOOL_QUERY;
-        param.searchQuery.query.query = {
-            mustQueries: []
-        }
-        for (let x in queryTypes) {
-            for (let o of queryTypes[x]) {
-                param.searchQuery.query.query.mustQueries.push({
-                    queryType: Number(x),
-                    query: o
-                });
-            }
-        }
-        // }
-        let rs = await this._parent.instances.search(param), data = [];
-        for (let row of rs.rows) {
-            let d: any = {};
-            for (let r of row.primaryKey) {
-                d[r.name] = r.value;
-            }
-            if (row.attributes.length > 0) {
-                d.timestamp = row.attributes[0].timestamp.toNumber()
-                for (let r of row.attributes) {
-                    d[r.columnName] = toLongFunc(this.define[r.columnName].type, r.columnValue);
-                }
-            }
-            data.push(d)
-        }
-        return data;
+        conf.count = false;
+        return this.findAndCountAll(conf)
     }
     /**
      * 创建数据
@@ -381,7 +305,86 @@ class ModelsDefine {
      */
     async findAndCountAll(conf: any) {
         await this.check()
-        debugger
+        let param = {
+            tableName: this.table,
+            indexName: this.table + '_pk',
+            searchQuery: {
+                limit: conf.limit || 10,
+                offset: conf.offset || 0,
+                query: {
+                    queryType: TableStore.QueryType.MATCH_ALL_QUERY,
+                    query: {}
+                    // query: {
+                    //     mustQueryies: [],
+                    //     // shouldQueries: [],
+                    //     // mustNotQueries: [],
+                    // },
+                    // minimumShouldMatch: 0
+                },
+                getTotalCount: conf.count || true
+            },
+            columnToGet: { //返回列设置：RETURN_SPECIFIED(自定义),RETURN_ALL(所有列),RETURN_NONE(不返回)
+                returnType: TableStore.ColumnReturnType.RETURN_SPECIFIED,
+                returnNames: conf.fields
+            }
+        }
+        let queryTypes: any = {};
+        for (let x in conf.where) {
+            switch (x) {
+                case 'between': break;
+                case 'gt': break;
+                case 'lt': break;
+                case 'gte': break;
+                case 'lte': break;
+                default:
+                    //精确查找
+                    // queryTypes.push();
+                    if (!queryTypes[TableStore.QueryType.TERM_QUERY]) {
+                        queryTypes[TableStore.QueryType.TERM_QUERY] = [];
+                    }
+                    queryTypes[TableStore.QueryType.TERM_QUERY].push({
+                        fieldName: x,
+                        term: conf.where[x]
+                    })
+                    break;
+            }
+        }
+        let qts = Object.keys(queryTypes);
+        // if (qts.length == 1) {
+        //     param.searchQuery.query.queryType = Number(qts[0]);
+        //     param.searchQuery.query.query = queryTypes[qts[0]];
+        // } else {
+        param.searchQuery.query.queryType = TableStore.QueryType.BOOL_QUERY;
+        param.searchQuery.query.query = {
+            mustQueries: []
+        }
+        for (let x in queryTypes) {
+            for (let o of queryTypes[x]) {
+                param.searchQuery.query.query.mustQueries.push({
+                    queryType: Number(x),
+                    query: o
+                });
+            }
+        }
+        // }
+        let rs = await this._parent.instances.search(param), data = [];
+        for (let row of rs.rows) {
+            let d: any = {};
+            for (let r of row.primaryKey) {
+                d[r.name] = r.value;
+            }
+            if (row.attributes.length > 0) {
+                d.timestamp = row.attributes[0].timestamp.toNumber()
+                for (let r of row.attributes) {
+                    d[r.columnName] = toLongFunc(this.define[r.columnName].type, r.columnValue);
+                }
+            }
+            data.push(d)
+        }
+        return {
+            count: rs.totalCounts,
+            rows: data,
+        };
     }
     /**
      * 删除数据
