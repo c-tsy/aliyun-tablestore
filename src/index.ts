@@ -232,7 +232,7 @@ class ModelsDefine {
      */
     async findAll(conf: any) {
         conf.count = false;
-        return this.findAndCountAll(conf)
+        return (await this.findAndCountAll(conf)).rows;
     }
     /**
      * 创建数据
@@ -305,7 +305,7 @@ class ModelsDefine {
      */
     async findAndCountAll(conf: any) {
         await this.check()
-        let param = {
+        let param: any = {
             tableName: this.table,
             indexName: this.table + '_pk',
             searchQuery: {
@@ -328,8 +328,9 @@ class ModelsDefine {
                 returnNames: conf.fields
             }
         }
-        let queryTypes: any = {};
+        let queryTypes: any = {}, where = false;
         for (let x in conf.where) {
+            where = true;
             switch (x) {
                 case 'between': break;
                 case 'gt': break;
@@ -349,21 +350,18 @@ class ModelsDefine {
                     break;
             }
         }
-        let qts = Object.keys(queryTypes);
-        // if (qts.length == 1) {
-        //     param.searchQuery.query.queryType = Number(qts[0]);
-        //     param.searchQuery.query.query = queryTypes[qts[0]];
-        // } else {
-        param.searchQuery.query.queryType = TableStore.QueryType.BOOL_QUERY;
-        param.searchQuery.query.query = {
-            mustQueries: []
-        }
-        for (let x in queryTypes) {
-            for (let o of queryTypes[x]) {
-                param.searchQuery.query.query.mustQueries.push({
-                    queryType: Number(x),
-                    query: o
-                });
+        if (where) {
+            param.searchQuery.query.queryType = TableStore.QueryType.BOOL_QUERY;
+            param.searchQuery.query.query = {
+                mustQueries: []
+            }
+            for (let x in queryTypes) {
+                for (let o of queryTypes[x]) {
+                    param.searchQuery.query.query.mustQueries.push({
+                        queryType: Number(x),
+                        query: o
+                    });
+                }
             }
         }
         // }
@@ -382,7 +380,7 @@ class ModelsDefine {
             data.push(d)
         }
         return {
-            count: rs.totalCounts,
+            count: Number(rs.totalCounts),
             rows: data,
         };
     }
