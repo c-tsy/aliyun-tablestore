@@ -266,20 +266,34 @@ class ModelsDefine {
                 default:
                     //精确查找
                     // queryTypes.push();
-                    queryTypes[TableStore.QueryType.MATCH_ALL_QUERY] = {
+                    if (!queryTypes[TableStore.QueryType.TERM_QUERY]) {
+                        queryTypes[TableStore.QueryType.TERM_QUERY] = [];
+                    }
+                    queryTypes[TableStore.QueryType.TERM_QUERY].push({
                         fieldName: x,
                         term: conf.where[x]
-                    }
+                    })
                     break;
             }
         }
         let qts = Object.keys(queryTypes);
-        if (qts.length == 1) {
-            param.searchQuery.query.queryType = Number(qts[0]);
+        // if (qts.length == 1) {
+        //     param.searchQuery.query.queryType = Number(qts[0]);
+        //     param.searchQuery.query.query = queryTypes[qts[0]];
+        // } else {
+        param.searchQuery.query.queryType = TableStore.QueryType.BOOL_QUERY;
+        param.searchQuery.query.query = {
+            mustQueries: []
         }
         for (let x in queryTypes) {
-            param.searchQuery.query.query = queryTypes[x];
+            for (let o of queryTypes[x]) {
+                param.searchQuery.query.query.mustQueries.push({
+                    queryType: Number(x),
+                    query: o
+                });
+            }
         }
+        // }
         let rs = await this._parent.instances.search(param), data = [];
         for (let row of rs.rows) {
             let d: any = {};
