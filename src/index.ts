@@ -70,6 +70,18 @@ export function getLongFunc(type: any, value: any) {
     }
     return value;
 }
+export function toLongFunc(type: any, value: any) {
+    let ts = getTSType(type);
+    switch (ts) {
+        case 'INTEGER':
+            return value.toNumber();
+            break;
+        case 'STRING':
+            return value;
+            break;
+    }
+    return value;
+}
 /**
  * 数据操作
  */
@@ -107,13 +119,19 @@ class ModelsDefine {
                 tableOptions: {
                     timeToLive: -1,// 数据的过期时间, 单位秒, -1代表永不过期. 假如设置过期时间为一年, 即为 365 * 24 * 3600.
                     maxVersions: 1// 保存的最大版本数, 设置为1即代表每列上最多保存一个版本(保存最新的版本).
-                }
+                },
+                indexMetas: [
+                    {
+                        name: this.table + '_pk',
+                        primaryKey: []
+                    }
+                ]
             }
             let auto = false;
             for (let key in this.define) {
                 let c = this.define[key]
                 if (key == '_id') {
-                    ctable.tableMeta.primaryKey.push({ name: "_id", type: "STRING" });
+                    // ctable.tableMeta.primaryKey.push({ name: "_id", type: "STRING" });
                     auto = true;
                     continue;
                 }
@@ -126,9 +144,10 @@ class ModelsDefine {
                         type: getTSType(c.type),
                     }
                     if (c.autoIncrement && auto) {
-                        pkc.option = 'AUTO_INCREMENT'
+                        // pkc.option = 'AUTO_INCREMENT'
                     }
                     ctable.tableMeta.primaryKey.push(pkc)
+                    ctable.indexMetas[0].primaryKey.push(key);
                 } else {
                     // ctable.tableMeta.definedColumn.push({
                     //     name: key,
@@ -165,39 +184,69 @@ class ModelsDefine {
      */
     async findAll(conf: any) {
         await this.check()
-        let rs = await this._parent.instances.getRange({
+        let param = {
             tableName: this.table,
-            direction: TableStore.Direction.FORWARD,
-            inclusiveStartPrimaryKey: [
-                { AID: TableStore.INF_MIN },
-                { AppID: TableStore.INF_MIN },
-                { Name: TableStore.INF_MIN },
-            ],
-            exclusiveEndPrimaryKey: [
-                { AID: TableStore.INF_MAX },
-                { AppID: TableStore.INF_MAX },
-                { Name: TableStore.INF_MAX },
-            ],
-            maxVersions: 10,
-            limit: 2
-            // searchQuery: {
-            //     offset: 0,
-            //     limit: 10, //如果只为了取行数，但不需要具体数据，可以设置limit=0，即不返回任意一行数据。
-            //     query: { // 设置查询类型为TermQuery
-            //         queryType: TableStore.QueryType.TERM_QUERY,
-            //         query: {
-            //             fieldName: "EID",
-            //             term: "1"
-            //         }
-            //     },
-            //     getTotalCount: true // 结果中的TotalCount可以表示表中数据的总行数， 默认false不返回
-            // },
-            // columnToGet: { //返回列设置：RETURN_SPECIFIED(自定义),RETURN_ALL(所有列),RETURN_NONE(不返回)
-            //     returnType: conf.attributes && conf.attributes.length > 0 ? TableStore.ColumnReturnType.RETURN_SPECIFIED : TableStore.ColumnReturnType.RETURN_ALL,
-            //     returnNames: conf.attributes || []
-            // }
-        })
-        return [{ dataValues: 1 }];
+            indexName: this.table + '_pk',
+            searchQuery: {
+                limit: conf.limit || 10,
+                offset: conf.offset || 0,
+                query: {
+                    queryType: TableStore.QueryType.MATCH_ALL_QUERY,
+                    query: {}
+                    // query: {
+                    //     mustQueryies: [],
+                    //     // shouldQueries: [],
+                    //     // mustNotQueries: [],
+                    // },
+                    // minimumShouldMatch: 0
+                },
+                getTotalCount: false
+            },
+            columnToGet: { //返回列设置：RETURN_SPECIFIED(自定义),RETURN_ALL(所有列),RETURN_NONE(不返回)
+                returnType: TableStore.ColumnReturnType.RETURN_SPECIFIED,
+                returnNames: conf.fields
+            }
+        }
+        let queryTypes: any = {};
+        for (let x in conf.where) {
+            switch (x) {
+                case 'between': break;
+                case 'gt': break;
+                case 'lt': break;
+                case 'gte': break;
+                case 'lte': break;
+                default:
+                    //精确查找
+                    // queryTypes.push();
+                    queryTypes[TableStore.QueryType.MATCH_ALL_QUERY] = {
+                        fieldName: x,
+                        term: conf.where[x]
+                    }
+                    break;
+            }
+        }
+        let qts = Object.keys(queryTypes);
+        if (qts.length == 1) {
+            param.searchQuery.query.queryType = Number(qts[0]);
+        }
+        for (let x in queryTypes) {
+            param.searchQuery.query.query = queryTypes[x];
+        }
+        let rs = await this._parent.instances.search(param), data = [];
+        for (let row of rs.rows) {
+            let d: any = {};
+            for (let r of row.primaryKey) {
+                d[r.name] = r.value;
+            }
+            if (row.attributes.length > 0) {
+                d.timestamp = row.attributes[0].timestamp.toNumber()
+                for (let r of row.attributes) {
+                    d[r.columnName] = toLongFunc(this.define[r.columnName].type, r.columnValue);
+                }
+            }
+            data.push(d)
+        }
+        return data;
     }
     /**
      * 创建数据
@@ -241,7 +290,7 @@ class ModelsDefine {
                 let obj = this.define[x];
                 if (obj.primaryKey) {
                     if (obj.autoIncrement) {
-                        row.primaryKey.push({ [x]: getLongFunc(obj.type, conf[x] || 0) })
+                        // row.primaryKey.push({ [x]: getLongFunc(obj.type, conf[x] || 0) })
                     } else {
                         row.primaryKey.push({
                             [x]: getLongFunc(obj.type, conf[x] || '')
