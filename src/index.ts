@@ -297,7 +297,28 @@ class ModelsDefine {
             }
             params.tables[0].rows.push(row);
         }
-        let rs = await this._parent.instances.batchWriteRow(params)
+        let rs: any = { tables: [] }
+        if (params.tables[0].rows.length > 200) {
+            let ps = [];
+            for (let i = 0; i < data.length; i += 200) {
+                let pt: { [index: string]: any } = {
+                    tables: [
+                        {
+                            tableName: this.table,
+                            rows: params.tables[0].rows.slice(i, i + 200)
+                        }
+                    ]
+                };
+                ps.push(this._parent.instances.batchWriteRow(pt))
+            }
+            rs = {
+                tables: [...(await Promise.all(ps)).map((v) => {
+                    return v.tables;
+                })]
+            };
+        } else {
+            rs = await this._parent.instances.batchWriteRow(params)
+        }
         //TODO 检测是否成功
         let pass = true;
         for (let x of rs.tables) {
@@ -318,7 +339,7 @@ class ModelsDefine {
             tableName: this.table,
             indexName: this.table + '_pk',
             searchQuery: {
-                limit: conf.limit || 10,
+                limit: conf.limit && conf.limit <= 100 ? conf.limit : 100,
                 offset: conf.offset || 0,
                 query: {
                     queryType: TableStore.QueryType.MATCH_ALL_QUERY,
@@ -450,6 +471,14 @@ class ModelsDefine {
         }
         // }
         let rs = await this._parent.instances.search(param), data = [];
+        if (rs.nextToken && (!conf.limit || conf.limit > param.searchQuery.limit)) {
+            while (rs.nextToken && rs.nextToken.length > 0) {
+                param.searchQuery.token = rs.nextToken;
+                let ors = await this._parent.instances.search(param)
+                rs.rows.push(...ors.rows);
+                rs.nextToken = ors.nextToken;
+            }
+        }
         for (let row of rs.rows) {
             let d: any = {};
             for (let r of row.primaryKey) {
@@ -518,8 +547,9 @@ class ModelsDefine {
             needFindFirst = true;
         }
         if (needFindFirst) {
-            let primaryKeys = await this.findAll(Object.assign(confs, { fields: this.primaryKeys }));
-            for (let pks of primaryKeys) {
+            let primaryKeys = await this.findAndCountAll(Object.assign(confs, { fields: this.primaryKeys }));
+            if (primaryKeys.count == 0) { return true; }
+            for (let pks of primaryKeys.rows) {
                 let rowt: { type: string, condition: any, primaryKey: { [index: string]: any }, attributeColumns: { [index: string]: any }, [index: string]: any } = {
                     type: "DELETE",
                     condition: new TableStore.Condition(TableStore.RowExistenceExpectation.IGNORE, null),
