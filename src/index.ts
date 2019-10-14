@@ -472,9 +472,81 @@ class ModelsDefine {
      * 删除数据
      * @param conf 
      */
-    async destroy(conf: any) {
+    async destroy(confs: any) {
         await this.check()
-        debugger
+        let params: { [index: string]: any } = {
+            tables: [
+                {
+                    tableName: this.table,
+                    rows: []
+                }
+            ]
+        };
+        let row: { type: string, condition: any, primaryKey: { [index: string]: any }, attributeColumns: { [index: string]: any }, [index: string]: any } = {
+            type: "DELETE",
+            condition: new TableStore.Condition(TableStore.RowExistenceExpectation.IGNORE, null),
+            primaryKey: [],
+            attributeColumns: [],
+            returnContent: { returnType: TableStore.ReturnType.Primarykey }
+        }
+        /**
+         * 是否需要前置查询
+         */
+        let needFindFirst = false;
+        for (let key in confs) {
+            switch (key) {
+                case 'where':
+                    for (let x in confs[key]) {
+                        if (!['number', 'boolean', 'string'].includes(typeof confs[key][x])) {
+                            needFindFirst = true;
+                            break;
+                        }
+                        if (this.define[x].primaryKey) {
+                            row.primaryKey.push({
+                                [x]: getLongFunc(this.define[x].type, confs[key][x])
+                            })
+                        } else {
+                            //需要查询出主键再操作
+                            needFindFirst = true;
+                            break;
+                        }
+                    }
+                    break;
+            }
+        }
+        if (Object.keys(row.primaryKey).length != this.primaryKeys.length) {
+            needFindFirst = true;
+        }
+        if (needFindFirst) {
+            let primaryKeys = await this.findAll(Object.assign(confs, { fields: this.primaryKeys }));
+            for (let pks of primaryKeys) {
+                let rowt: { type: string, condition: any, primaryKey: { [index: string]: any }, attributeColumns: { [index: string]: any }, [index: string]: any } = {
+                    type: "DELETE",
+                    condition: new TableStore.Condition(TableStore.RowExistenceExpectation.IGNORE, null),
+                    primaryKey: Object.keys(pks).map((v: string) => {
+                        return { [v]: pks[v] }
+                    }),
+                    attributeColumns: row.attributeColumns,
+                    returnContent: { returnType: TableStore.ReturnType.Primarykey }
+                }
+                params.tables[0].rows.push(rowt);
+            }
+        } else {
+            params.tables[0].rows.push(row);
+        }
+        if (params.tables[0].rows.length == 0) {
+            return true;
+        }
+        let rs = await this._parent.instances.batchWriteRow(params)
+        //TODO 检测是否成功
+        let pass = true;
+        for (let x of rs.tables) {
+            if (!x.isOk) {
+                pass = false;
+                throw new Error(x.errorCode)
+            }
+        }
+        return pass;
     }
     /**
      * 更新数据
