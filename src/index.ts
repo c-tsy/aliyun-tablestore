@@ -337,6 +337,20 @@ class ModelsDefine {
                 case 'lt': break;
                 case 'gte': break;
                 case 'lte': break;
+                case 'in':
+                    //精确查找
+                    if (conf.where[x] instanceof Array) {
+                        if (!queryTypes[TableStore.QueryType.TERM_QUERY]) {
+                            queryTypes[TableStore.QueryType.TERM_QUERY] = [];
+                        }
+                        queryTypes[TableStore.QueryType.TERM_QUERY].push({
+                            fieldName: x,
+                            term: conf.where[x]
+                        });
+                    } else {
+                        throw new Error('In Search Must Array')
+                    }
+                    break;
                 default:
                     //精确查找
                     // queryTypes.push();
