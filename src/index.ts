@@ -1,5 +1,8 @@
+import * as Sequelize from 'sequelize';
 const TableStore: any = require('tablestore')
 const Long: any = TableStore.Long;
+const Op: any = Sequelize.Op;
+import * as _ from 'lodash'
 export class UpdateConfig {
     where?: Object = {};
     options?: {
@@ -89,11 +92,17 @@ class ModelsDefine {
     checked: boolean = false;
     define: any
     table: string;
+    primaryKeys: string[] = [];
     protected _parent: CTSYTableStore;
-    constructor(cts: CTSYTableStore, TableName: string, define: Object) {
+    constructor(cts: CTSYTableStore, TableName: string, define: any) {
         this._parent = cts;
         this.define = define;
         this.table = TableName;
+        for (let x in define) {
+            if (define[x].primaryKey) {
+                this.primaryKeys.push(x);
+            }
+        }
     }
     /**
      * 检查
@@ -331,16 +340,21 @@ class ModelsDefine {
         let queryTypes: any = {}, where = false;
         for (let x in conf.where) {
             where = true;
-            let type = -1, query = {};
+            let type = -1, query = {}, val = conf.where[x], key = x;
+            if ('object' == typeof conf.where[x]) {
+                key = x;
+                x = Object.keys(conf.where[x])[0]
+                val = conf.where[key][x]
+            }
             switch (x) {
                 case 'between':
                     //精确查找
-                    if (conf.where[x] instanceof Array) {
+                    if (val instanceof Array) {
                         type = TableStore.QueryType.RANGE_QUERY;
                         query = {
-                            fieldName: x,
-                            rangeFrom: conf.where[x][0],
-                            rangeTo: conf.where[x][1],
+                            fieldName: key,
+                            rangeFrom: val[0],
+                            rangeTo: val[1],
                             includeLower: true,
                             includeUpper: true,
                         }
@@ -350,11 +364,11 @@ class ModelsDefine {
                     break;
                 case 'gt':
                 case 'gte':
-                    if ("number" == typeof conf.where[x]) {
+                    if ("number" == typeof val) {
                         type = TableStore.QueryType.RANGE_QUERY;
                         query = {
-                            fieldName: x,
-                            rangeFrom: conf.where[x],
+                            fieldName: key,
+                            rangeFrom: val,
                             // rangeTo: conf.where[x][1],
                             // includeLower: true,
                             includeLower: x == 'gte',
@@ -365,12 +379,12 @@ class ModelsDefine {
                     break;
                 case 'lt':
                 case 'lte':
-                    if ("number" == typeof conf.where[x]) {
+                    if ("number" == typeof val) {
                         type = TableStore.QueryType.RANGE_QUERY;
                         query = {
-                            fieldName: x,
+                            fieldName: key,
                             // rangeFrom: conf.where[x][0],
-                            rangeTo: conf.where[x],
+                            rangeTo: val,
                             // includeLower: true,
                             includeUpper: x == 'lte',
                         }
@@ -380,24 +394,24 @@ class ModelsDefine {
                     break;
                 case 'in':
                     //精确查找
-                    if (conf.where[x] instanceof Array) {
+                    if (val instanceof Array) {
                         type = TableStore.QueryType.TERMS_QUERY;
                         query = {
-                            fieldName: x,
-                            term: conf.where[x]
+                            fieldName: key,
+                            terms: val
                         }
                     } else {
                         throw new Error('In Search Must Array')
                     }
                     break;
                 case 'like':
-                    let value = conf.where[x].replace(/%/g, '*');
+                    let value = val.replace(/%/g, '*');
                     if (value.indexOf('*') == 0) {
                         value.replace('*', '?');
                     }
                     type = TableStore.QueryType.WILDCARD_QUERY;
                     query = {
-                        fieldName: "",
+                        fieldName: key,
                         value
                     }
                     break;
@@ -408,8 +422,8 @@ class ModelsDefine {
                         queryTypes[TableStore.QueryType.TERM_QUERY] = [];
                     }
                     queryTypes[TableStore.QueryType.TERM_QUERY].push({
-                        fieldName: x,
-                        term: conf.where[x]
+                        fieldName: key,
+                        term: val
                     })
                     break;
             }
@@ -465,8 +479,81 @@ class ModelsDefine {
     /**
      * 更新数据
      */
-    async update(data: any, conf: any) {
+    async update(data: any, confs: any) {
         await this.check()
+        let params: { [index: string]: any } = {
+            tables: [
+                {
+                    tableName: this.table,
+                    rows: []
+                }
+            ]
+        };
+        let row: { type: string, condition: any, primaryKey: { [index: string]: any }, attributeColumns: { [index: string]: any }, [index: string]: any } = {
+            type: "UPDATE",
+            condition: new TableStore.Condition(TableStore.RowExistenceExpectation.IGNORE, null),
+            primaryKey: [],
+            attributeColumns: [{ PUT: [] }],
+            returnContent: { returnType: TableStore.ReturnType.Primarykey }
+        }
+        for (let x in data) {
+            row.attributeColumns[0].PUT.push({ [x]: getLongFunc(this.define[x].type, data[x]) })
+        }
+        /**
+         * 是否需要前置查询
+         */
+        let needFindFirst = false;
+        for (let key in confs) {
+            switch (key) {
+                case 'where':
+                    for (let x in confs[key]) {
+                        if (!['number', 'boolean', 'string'].includes(typeof confs[key][x])) {
+                            needFindFirst = true;
+                            break;
+                        }
+                        if (this.define[x].primaryKey) {
+                            row.primaryKey.push({
+                                [x]: getLongFunc(this.define[x].type, confs[key][x])
+                            })
+                        } else {
+                            //需要查询出主键再操作
+                            needFindFirst = true;
+                            break;
+                        }
+                    }
+                    break;
+            }
+        }
+        if (Object.keys(row.primaryKey).length != this.primaryKeys.length) {
+            needFindFirst = true;
+        }
+        if (needFindFirst) {
+            let primaryKeys = await this.findAll(Object.assign(confs, { fields: this.primaryKeys }));
+            for (let pks of primaryKeys) {
+                let rowt: { type: string, condition: any, primaryKey: { [index: string]: any }, attributeColumns: { [index: string]: any }, [index: string]: any } = {
+                    type: "UPDATE",
+                    condition: new TableStore.Condition(TableStore.RowExistenceExpectation.IGNORE, null),
+                    primaryKey: Object.keys(pks).map((v: string) => {
+                        return { [v]: pks[v] }
+                    }),
+                    attributeColumns: row.attributeColumns,
+                    returnContent: { returnType: TableStore.ReturnType.Primarykey }
+                }
+                params.tables[0].rows.push(rowt);
+            }
+        } else {
+            params.tables[0].rows.push(row);
+        }
+        let rs = await this._parent.instances.batchWriteRow(params)
+        //TODO 检测是否成功
+        let pass = true;
+        for (let x of rs.tables) {
+            if (!x.isOk) {
+                pass = false;
+                throw new Error(x.errorCode)
+            }
+        }
+        return data;
         debugger
     }
 }
