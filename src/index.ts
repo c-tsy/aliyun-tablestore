@@ -348,10 +348,36 @@ class ModelsDefine {
                         throw new Error('between Search Must Array')
                     }
                     break;
-                case 'gt': break;
-                case 'lt': break;
-                case 'gte': break;
-                case 'lte': break;
+                case 'gt':
+                case 'gte':
+                    if ("number" == typeof conf.where[x]) {
+                        type = TableStore.QueryType.RANGE_QUERY;
+                        query = {
+                            fieldName: x,
+                            rangeFrom: conf.where[x],
+                            // rangeTo: conf.where[x][1],
+                            // includeLower: true,
+                            includeLower: x == 'gte',
+                        }
+                    } else {
+                        throw new Error('gt/lt/gte/lte Search Must number')
+                    }
+                    break;
+                case 'lt':
+                case 'lte':
+                    if ("number" == typeof conf.where[x]) {
+                        type = TableStore.QueryType.RANGE_QUERY;
+                        query = {
+                            fieldName: x,
+                            // rangeFrom: conf.where[x][0],
+                            rangeTo: conf.where[x],
+                            // includeLower: true,
+                            includeUpper: x == 'lte',
+                        }
+                    } else {
+                        throw new Error('gt/lt/gte/lte Search Must number')
+                    }
+                    break;
                 case 'in':
                     //精确查找
                     if (conf.where[x] instanceof Array) {
