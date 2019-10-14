@@ -331,8 +331,23 @@ class ModelsDefine {
         let queryTypes: any = {}, where = false;
         for (let x in conf.where) {
             where = true;
+            let type = -1, query = {};
             switch (x) {
-                case 'between': break;
+                case 'between':
+                    //精确查找
+                    if (conf.where[x] instanceof Array) {
+                        type = TableStore.QueryType.RANGE_QUERY;
+                        query = {
+                            fieldName: x,
+                            rangeFrom: conf.where[x][0],
+                            rangeTo: conf.where[x][1],
+                            includeLower: true,
+                            includeUpper: true,
+                        }
+                    } else {
+                        throw new Error('between Search Must Array')
+                    }
+                    break;
                 case 'gt': break;
                 case 'lt': break;
                 case 'gte': break;
@@ -340,13 +355,11 @@ class ModelsDefine {
                 case 'in':
                     //精确查找
                     if (conf.where[x] instanceof Array) {
-                        if (!queryTypes[TableStore.QueryType.TERM_QUERY]) {
-                            queryTypes[TableStore.QueryType.TERM_QUERY] = [];
-                        }
-                        queryTypes[TableStore.QueryType.TERM_QUERY].push({
+                        type = TableStore.QueryType.TERMS_QUERY;
+                        query = {
                             fieldName: x,
                             term: conf.where[x]
-                        });
+                        }
                     } else {
                         throw new Error('In Search Must Array')
                     }
@@ -362,6 +375,12 @@ class ModelsDefine {
                         term: conf.where[x]
                     })
                     break;
+            }
+            if (type > 0) {
+                if (!queryTypes[type]) {
+                    queryTypes[type] = [];
+                }
+                queryTypes[type].push(query)
             }
         }
         if (where) {
