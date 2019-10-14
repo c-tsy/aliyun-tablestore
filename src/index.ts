@@ -390,6 +390,17 @@ class ModelsDefine {
                         throw new Error('In Search Must Array')
                     }
                     break;
+                case 'like':
+                    let value = conf.where[x].replace(/%/g, '*');
+                    if (value.indexOf('*') == 0) {
+                        value.replace('*', '?');
+                    }
+                    type = TableStore.QueryType.WILDCARD_QUERY;
+                    query = {
+                        fieldName: "",
+                        value
+                    }
+                    break;
                 default:
                     //精确查找
                     // queryTypes.push();
