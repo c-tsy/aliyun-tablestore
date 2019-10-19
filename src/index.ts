@@ -9,9 +9,9 @@ export class UpdateConfig {
         returning?: boolean
     } = {}
 }
-function fget(obj: any, key: string) {
+async function fget(obj: any, key: string, o?: any) {
     if (obj[key] instanceof Function) {
-        return obj[key](obj);
+        return await obj[key](obj, o);
     }
     return obj[key];
 }
@@ -292,7 +292,7 @@ class ModelsDefine {
                         })
                     }
                 } else {
-                    row.attributeColumns.push({ [x]: getLongFunc(obj.type, conf[x] !== undefined ? conf[x] : fget(obj, 'defaultValue')) })
+                    row.attributeColumns.push({ [x]: getLongFunc(obj.type, conf[x] !== undefined ? conf[x] : await fget(obj, 'defaultValue', this)) })
                 }
             }
             params.tables[0].rows.push(row);
@@ -383,6 +383,9 @@ class ModelsDefine {
                         throw new Error('between Search Must Array')
                     }
                     break;
+                case 'or':
+
+                    break;
                 case 'gt':
                 case 'gte':
                     if ("number" == typeof val) {
@@ -438,14 +441,11 @@ class ModelsDefine {
                     break;
                 default:
                     //精确查找
-                    // queryTypes.push();
-                    if (!queryTypes[TableStore.QueryType.TERM_QUERY]) {
-                        queryTypes[TableStore.QueryType.TERM_QUERY] = [];
-                    }
-                    queryTypes[TableStore.QueryType.TERM_QUERY].push({
+                    type = TableStore.QueryType.TERM_QUERY;
+                    query = {
                         fieldName: key,
                         term: val
-                    })
+                    }
                     break;
             }
             if (type > 0) {
