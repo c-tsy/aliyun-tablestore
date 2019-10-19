@@ -283,9 +283,9 @@ class ModelsDefine {
             }
             for (let x in this.define) {
                 let obj = this.define[x];
-                let v = getLongFunc(obj.type, conf[x] !== undefined ? conf[x] : await fget(obj, 'defaultValue', [options, conf, data, this]));
+                let v = !obj.autoIncrement && conf[x] !== undefined ? conf[x] : await fget(obj, 'defaultValue', [options, conf, data, this]);
                 conf[x] = v;
-                let pd = { [x]: v }
+                let pd = { [x]: getLongFunc(obj.type, v) }
                 if (obj.primaryKey) {
                     if (obj.autoIncrement) {
                         // row.primaryKey.push({ [x]: getLongFunc(obj.type, conf[x] || 0) })
@@ -484,7 +484,8 @@ class ModelsDefine {
         for (let row of rs.rows) {
             let d: any = {};
             for (let r of row.primaryKey) {
-                d[r.name] = r.value;
+                // d[r.name] = r.value;
+                d[r.name] = toLongFunc(this.define[r.name].type, r.value);
             }
             if (row.attributes.length > 0) {
                 d.timestamp = row.attributes[0].timestamp.toNumber()
