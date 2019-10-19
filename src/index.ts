@@ -247,8 +247,8 @@ class ModelsDefine {
      * 创建数据
      * @param conf 
      */
-    async create(conf: any) {
-        await this.bulkCreate([conf])
+    async create(conf: any, options: any) {
+        await this.bulkCreate([conf], options)
         return conf;
     }
     /**
@@ -263,7 +263,7 @@ class ModelsDefine {
      * 批量创建
      * @param data 
      */
-    async bulkCreate(data: any[]) {
+    async bulkCreate(data: any[], options: any) {
         await this.check()
         let params: { [index: string]: any } = {
             tables: [
@@ -283,16 +283,18 @@ class ModelsDefine {
             }
             for (let x in this.define) {
                 let obj = this.define[x];
+                let v = getLongFunc(obj.type, conf[x] !== undefined ? conf[x] : await fget(obj, 'defaultValue', [options, conf, data, this]));
+                conf[x] = v;
+                let pd = { [x]: v }
                 if (obj.primaryKey) {
                     if (obj.autoIncrement) {
                         // row.primaryKey.push({ [x]: getLongFunc(obj.type, conf[x] || 0) })
+                        row.primaryKey.push(pd)
                     } else {
-                        row.primaryKey.push({
-                            [x]: getLongFunc(obj.type, conf[x] || '')
-                        })
+                        row.primaryKey.push(pd)
                     }
                 } else {
-                    row.attributeColumns.push({ [x]: getLongFunc(obj.type, conf[x] !== undefined ? conf[x] : await fget(obj, 'defaultValue', this)) })
+                    row.attributeColumns.push(pd)
                 }
             }
             params.tables[0].rows.push(row);
