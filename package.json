@@ -13,7 +13,7 @@
   "author": "castleiMac <castle@tansuyun.cn>",
   "license": "MIT",
   "dependencies": {
-    "sequelize": "4.*",
+    "sequelize": "5.*",
     "tablestore": "^5.0.2"
   },
   "devDependencies": {
